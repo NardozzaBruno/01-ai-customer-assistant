@@ -13,6 +13,7 @@ The current version uses rules to classify Portuguese customer messages.
 - Grooming service classification
 - Combined bath and grooming classification
 - General inquiry classification
+- Continuous terminal session with `sair` to exit
 - Whole-word matching, ignoring case and accents
 - Simple negation handling with `nao`, `sem`, and `nem`
 
@@ -24,7 +25,10 @@ The current version uses rules to classify Portuguese customer messages.
 
 ## How to Run
 
-Run `python main.py` in the project folder and enter a message in Portuguese.
+Run `python main.py` in the project folder and enter messages in Portuguese.
+Each message is classified independently; the program keeps running until you
+type `sair` (case-insensitive, with surrounding spaces allowed). Empty messages
+show a hint. End-of-input or Ctrl+C also ends the session gracefully.
 
 ## Examples
 
@@ -40,11 +44,12 @@ Run `python main.py` in the project folder and enter a message in Portuguese.
 
 Run `python -m unittest -v` in the project folder. No extra packages are required.
 Tests cover service categories, uppercase and accented messages, empty input,
-whole words, simple negations, request corrections, and terminal interaction.
+whole words, simple negations, request corrections, multiple messages, exit
+commands, empty terminal messages, and end-of-input.
 
 ## Project Status
 
-**Version 0.3:** Whole-word matching and simple negation rules with automated tests.
+**Version 0.4:** Continuous terminal sessions with an exit command and automated tests.
 
 **Next steps:** Expand language coverage and explore AI integration.
 

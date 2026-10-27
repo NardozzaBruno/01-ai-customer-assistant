@@ -40,8 +40,22 @@ def classificar_mensagem(mensagem: str) -> str:
 
 
 def main() -> None:
-    mensagem = input("Digite a mensagem do cliente: ")
-    print(f"Categoria: {classificar_mensagem(mensagem)}")
+    print("Assistente de atendimento. Digite 'sair' para encerrar.")
+    while True:
+        try:
+            mensagem = input("Digite a mensagem do cliente: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nAtendimento encerrado.")
+            break
+
+        if mensagem.casefold() == "sair":
+            print("Atendimento encerrado.")
+            break
+        if not mensagem:
+            print("Digite uma mensagem ou 'sair' para encerrar.")
+            continue
+
+        print(f"Categoria: {classificar_mensagem(mensagem)}")
 
 
 if __name__ == "__main__":
