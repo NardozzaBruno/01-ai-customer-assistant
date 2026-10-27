@@ -29,6 +29,15 @@ Run the following command in the project folder:
 
 ## Project Status
 
-**Version 0.1:** Functional keyword-based message classifier.
+**Version 0.2:** Keyword-based message classifier with a reusable classification function and automated tests.
 
-**Next steps:** Improve code organization, add tests, and explore AI integration.
+**Next steps:** Improve keyword matching and explore AI integration.
+## Running Tests
+
+Run `python -m unittest -v` in the project folder. No extra packages are required.
+
+Tests cover service categories, uppercase messages, empty input, and terminal interaction.
+
+## Current Limitations
+
+Classification uses keyword fragments, so it can misinterpret negations or words containing those fragments. It does not yet understand customer intent.

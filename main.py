@@ -1,14 +1,20 @@
+def classificar_mensagem(mensagem: str) -> str:
+    """Classifica uma mensagem usando palavras-chave de servicos do pet shop."""
+    mensagem = mensagem.lower()
 
-mensagem = input("Digite a mensagem do cliente: ").lower()
+    if "banho" in mensagem and "tosa" in mensagem:
+        return "Banho e Tosa"
+    if "banho" in mensagem:
+        return "Banho"
+    if "tosa" in mensagem:
+        return "Tosa"
+    return "Atendimento geral"
 
-if "banho" in mensagem and "tosa" in mensagem:
-    print("Categoria: Banho e Tosa")
 
-elif "banho" in mensagem:
-    print("Categoria: Banho")
+def main() -> None:
+    mensagem = input("Digite a mensagem do cliente: ")
+    print(f"Categoria: {classificar_mensagem(mensagem)}")
 
-elif "tosa" in mensagem:
-    print("Categoria: Tosa")
 
-else:
-    print("Categoria: Atendimento geral")
+if __name__ == "__main__":
+    main()
