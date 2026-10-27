@@ -1,9 +1,10 @@
+import os
 import subprocess
 import sys
 import unittest
 from pathlib import Path
 
-from main import classificar_mensagem
+from main import classificar_mensagem, gerar_resposta
 
 
 class ClassificadorTests(unittest.TestCase):
@@ -58,6 +59,8 @@ class ClassificadorTests(unittest.TestCase):
             input="nao quero banho, so tosa\nbanho\nsair\ntosa\n",
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
             timeout=5,
         )
         self.assertEqual(resultado.returncode, 0, resultado.stderr)
@@ -82,12 +85,48 @@ class ClassificadorTests(unittest.TestCase):
         self.assertIn("Categoria: Banho", resultado.stdout)
         self.assertIn("Atendimento encerrado.", resultado.stdout)
 
+    def test_respostas_por_categoria(self):
+        casos = [
+            ("Banho", "banho", "dia"),
+            ("Tosa", "tosa", "porte"),
+            ("Banho e Tosa", "banho e tosa", "porte"),
+            ("Atendimento geral", "banho e tosa", "procura"),
+        ]
+        for categoria, servico, pergunta in casos:
+            with self.subTest(categoria=categoria):
+                resposta = gerar_resposta(categoria)
+                self.assertIn(servico, resposta.lower())
+                self.assertIn(pergunta, resposta.lower())
+                self.assertTrue(resposta.endswith("?"))
+
+    def test_categoria_desconhecida_recebe_orientacao_geral(self):
+        self.assertEqual(
+            gerar_resposta("desconhecida"), gerar_resposta("Atendimento geral")
+        )
+
+    def test_respostas_no_atendimento_continuo(self):
+        resultado = self.executar_terminal(
+            "banho\ntosa\nbanho e tosa\nola\nsair\n"
+        )
+        self.assertEqual(resultado.stdout.count("Assistente:"), 4)
+        self.assertIn("solicitar o banho?", resultado.stdout)
+        self.assertIn("pet para a tosa?", resultado.stdout)
+        self.assertIn("solicitar banho e tosa?", resultado.stdout)
+        self.assertIn("procura?", resultado.stdout)
+        self.assertNotIn("Traceback", resultado.stderr)
+
+    def test_saida_e_entrada_vazia_nao_geram_respostas(self):
+        resultado = self.executar_terminal("\nsair\n")
+        self.assertNotIn("Assistente:", resultado.stdout)
+
     def executar_terminal(self, entrada):
         resultado = subprocess.run(
             [sys.executable, str(Path(__file__).with_name("main.py"))],
             input=entrada,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
             timeout=5,
         )
         self.assertEqual(resultado.returncode, 0, resultado.stderr)

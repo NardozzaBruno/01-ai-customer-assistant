@@ -39,8 +39,27 @@ def classificar_mensagem(mensagem: str) -> str:
     return "Atendimento geral"
 
 
+
+def gerar_resposta(categoria: str) -> str:
+    """Retorna uma orientacao inicial para a categoria identificada."""
+    respostas = {
+        "Banho": "Claro! Para qual dia você gostaria de solicitar o banho?",
+        "Tosa": "Certo! Qual é o porte do seu pet para a tosa?",
+        "Banho e Tosa": (
+            "Claro! Qual é o porte do seu pet e para qual dia "
+            "você gostaria de solicitar banho e tosa?"
+        ),
+        "Atendimento geral": (
+            "Olá! Posso ajudar com informações sobre banho e tosa. "
+            "Qual serviço você procura?"
+        ),
+    }
+    return respostas.get(categoria, respostas["Atendimento geral"])
+
+
 def main() -> None:
     print("Assistente de atendimento. Digite 'sair' para encerrar.")
+    print("Demonstração: não confirma agendamentos nem guarda respostas.")
     while True:
         try:
             mensagem = input("Digite a mensagem do cliente: ").strip()
@@ -55,7 +74,9 @@ def main() -> None:
             print("Digite uma mensagem ou 'sair' para encerrar.")
             continue
 
-        print(f"Categoria: {classificar_mensagem(mensagem)}")
+        categoria = classificar_mensagem(mensagem)
+        print(f"Categoria: {categoria}")
+        print(f"Assistente: {gerar_resposta(categoria)}")
 
 
 if __name__ == "__main__":
