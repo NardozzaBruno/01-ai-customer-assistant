@@ -1,4 +1,7 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta, timezone
+from collections.abc import Callable
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import re
 import unicodedata
 
@@ -57,12 +60,49 @@ def gerar_resposta(categoria: str) -> str:
     return "Olá! Posso ajudar com banho e tosa. Qual serviço você procura?"
 
 
+
+def hoje_sao_paulo() -> date:
+    try:
+        fuso = ZoneInfo("America/Sao_Paulo")
+    except ZoneInfoNotFoundError:
+        # Windows pode nao ter a base IANA; Sao Paulo usa UTC-3 atualmente.
+        fuso = timezone(timedelta(hours=-3))
+    return datetime.now(fuso).date()
+
+
+def resolver_data(dia: str, hoje: date) -> date:
+    """Resolve uma preferencia ou levanta ValueError com orientacao ao cliente."""
+    relativos = {"hoje": 0, "amanhã": 1, "depois de amanhã": 2}
+    semana = ["segunda-feira", "terça-feira", "quarta-feira", "quinta-feira",
+              "sexta-feira", "sábado", "domingo"]
+    if dia in relativos:
+        return hoje + timedelta(days=relativos[dia])
+    if dia in semana:
+        return hoje + timedelta(days=(semana.index(dia) - hoje.weekday()) % 7)
+    if dia in {"ontem", "anteontem"}:
+        raise ValueError("Essa data já passou. Informe hoje ou uma data futura.")
+    if not re.fullmatch(r"\d{1,2}/\d{1,2}(?:/\d{4})?", dia):
+        raise ValueError("Data inválida. Use dia/mês ou dia/mês/ano com quatro dígitos.")
+    partes = [int(item) for item in dia.split("/")]
+    try:
+        data = date(partes[2] if len(partes) == 3 else hoje.year, partes[1], partes[0])
+    except ValueError:
+        raise ValueError("Data inválida no calendário. Confira o dia, o mês e o ano.") from None
+    if data < hoje:
+        raise ValueError(
+            "Essa data já passou. Sem ano, considero o ano atual. "
+            "Informe uma data futura com o ano, por exemplo dia/mês/ano."
+        )
+    return data
+
+
 def extrair_detalhes(mensagem: str) -> tuple[str | None, str | None, bool]:
     """Extrai detalhes por palavras inteiras; pede esclarecimento se houver duvida."""
-    entrada = normalizar(mensagem)
+    entrada = normalizar(mensagem).replace("depois de amanha", "depois_de_amanha")
     portes = {"pequeno": "pequeno", "medio": "médio", "grande": "grande"}
     dias = {
         "hoje": "hoje", "amanha": "amanhã",
+        "depois_de_amanha": "depois de amanhã", "ontem": "ontem", "anteontem": "anteontem",
         "segunda": "segunda-feira", "terca": "terça-feira",
         "quarta": "quarta-feira", "quinta": "quinta-feira",
         "sexta": "sexta-feira", "sabado": "sábado", "domingo": "domingo",
@@ -75,10 +115,12 @@ def extrair_detalhes(mensagem: str) -> tuple[str | None, str | None, bool]:
         palavras = set(re.findall(r"\b\w+\b", trecho))
         p = palavras & portes.keys()
         d = palavras & dias.keys()
-        if (p or d) and palavras & NEGACOES:
+        numericas = set(re.findall(r"(?<![\w/])\d{1,4}/\d{1,4}(?:/\d{1,4})?(?![\w/])", trecho))
+        if (p or d or numericas) and palavras & NEGACOES:
             ambiguo = True
         encontrados_porte.update(portes[item] for item in p)
         encontrados_dia.update(dias[item] for item in d)
+        encontrados_dia.update(numericas)
     ambiguo = ambiguo or len(encontrados_porte) > 1 or len(encontrados_dia) > 1
     porte = next(iter(encontrados_porte)) if len(encontrados_porte) == 1 else None
     dia = next(iter(encontrados_dia)) if len(encontrados_dia) == 1 else None
@@ -92,9 +134,12 @@ class Atendimento:
     servico: str | None = None
     porte: str | None = None
     dia: str | None = None
+    data_desejada: date | None = None
+    relogio: Callable[[], date] = field(default=hoje_sao_paulo, repr=False)
 
     def reiniciar(self) -> None:
         self.servico = self.porte = self.dia = None
+        self.data_desejada = None
 
     def responder(self, mensagem: str) -> str:
         entrada = normalizar(mensagem)
@@ -113,6 +158,14 @@ class Atendimento:
                 "sem alternativas ou negações. O pedido anterior foi mantido."
             )
 
+        hoje = self.relogio()
+        data = None
+        if dia is not None:
+            try:
+                data = resolver_data(dia, hoje)
+            except ValueError as erro:
+                return f"{erro} O pedido anterior foi mantido."
+
         novo_servico = categoria != "Atendimento geral"
         if novo_servico:
             if self.servico is not None and self.servico != categoria:
@@ -122,17 +175,23 @@ class Atendimento:
             self.porte = porte
         if dia is not None:
             self.dia = dia
+            self.data_desejada = data
+
+        if self.data_desejada is not None and self.data_desejada < hoje:
+            self.dia = None
+            self.data_desejada = None
+            return "O dia informado anteriormente já passou. Para qual nova data deseja solicitar?"
 
         if self.servico is None:
             return gerar_resposta("Atendimento geral")
         if self.porte is None:
             return gerar_resposta(self.servico)
         if self.dia is None:
-            return "Para qual dia? Responda hoje, amanhã ou um dia da semana."
+            return "Para qual dia? Responda hoje, amanhã, um dia da semana ou uma data (dia/mês/ano)."
 
         resumo = (
             f"Resumo da solicitação: {self.servico}; porte {self.porte}; "
-            f"dia desejado: {self.dia}. "
+            f"dia desejado: {self.dia} ({self.data_desejada:%d/%m/%Y}). "
             "Agendamento não confirmado: depende da disponibilidade do pet shop. "
             "Para iniciar outra solicitação, informe o serviço."
         )

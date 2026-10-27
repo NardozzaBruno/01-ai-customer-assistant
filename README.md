@@ -10,7 +10,9 @@ A rule-based Portuguese customer service prototype for a pet shop, built with Py
 - Remembers the selected service, pet size, and preferred day during a request
 - Extracts size and day from natural phrases and combined service requests
 - Asks only for missing details and requests clarification for ambiguous details
-- Displays a request summary without confirming a booking
+- Resolves relative days, weekdays, and numeric dates to calendar dates
+- Rejects invalid dates and past days without overwriting the previous request
+- Displays a dated request summary without confirming a booking
 - Supports `cancelar` or `reiniciar` to discard a request, and `sair` to exit
 
 ## Technologies
@@ -25,7 +27,7 @@ Run `python main.py` in the project folder.
 
 1. Enter the service, for example `quero banho`.
 2. Reply with `pequeno`, `medio`, or `grande` for the pet size.
-3. Reply with `hoje`, `amanha`, or a weekday such as `sexta-feira`.
+3. Reply with `hoje`, `amanha`, a weekday such as `sexta-feira`, or a date such as `28/10/2026`.
 4. Read the request summary. Availability must still be checked by the pet shop.
 
 Accents and uppercase letters are accepted. Size and day can be supplied in either
@@ -44,14 +46,30 @@ Empty input shows a hint. End-of-input or Ctrl+C ends the session gracefully.
 
 ## Conversation Example
 
+Example with the current day fixed at October 27, 2026:
+
 ```text
 Cliente: quero banho
 Assistente: Certo, banho! Qual é o porte do seu pet (pequeno, médio ou grande)?
 Cliente: pequeno
-Assistente: Para qual dia? Responda hoje, amanhã ou um dia da semana.
+Assistente: Para qual dia? Responda hoje, amanhã, um dia da semana ou uma data (dia/mês/ano).
 Cliente: amanhã
-Assistente: Resumo da solicitação: Banho; porte pequeno; dia desejado: amanhã. Agendamento não confirmado: depende da disponibilidade do pet shop. Para iniciar outra solicitação, informe o serviço.
+Assistente: Resumo da solicitação: Banho; porte pequeno; dia desejado: amanhã (28/10/2026). Agendamento não confirmado: depende da disponibilidade do pet shop. Para iniciar outra solicitação, informe o serviço.
 ```
+
+## Date Rules
+
+- The current day is read in America/Sao_Paulo. If the IANA timezone database is
+  unavailable on Windows, the clock falls back to Sao Paulo's current UTC-3 offset.
+- `hoje`, `amanha`, and `depois de amanha` resolve to today, tomorrow, and two days ahead.
+- A weekday means its next occurrence, including today when it matches.
+- Dates accept `D/M`, `DD/MM`, or a four-digit year, such as `28/10/2026`.
+- Omitting the year means the current year. Past dates are rejected, without silently
+  rolling them forward to next year. Supply the year for a future-year request.
+- Invalid calendar dates, past dates, and `ontem`/`anteontem` are rejected.
+- Multiple date expressions require clarification, even if they could mean the same day.
+- An invalid date leaves all previous details intact. A stored date that becomes past
+  while the program remains open must be replaced before a summary can be produced.
 
 ## Session Behavior
 
@@ -68,13 +86,14 @@ Run `python -m unittest -v` in the project folder.
 Tests cover classification, simple negations, replies, full terminal conversations,
 size/day order, invalid details, cancellation, service changes, independent sessions,
 exit commands, end-of-input, natural phrases, combined details, corrections,
-repeated services, ambiguous details, and whole-word detail matching.
+repeated services, ambiguous details, whole-word detail matching, numeric dates,
+relative days, weekdays, leap years, year boundaries, past dates, and timezone conversion.
 
 ## Project Status
 
-**Version 0.7:** Natural phrases and combined details with clarification for ambiguity.
+**Version 0.8:** Calendar dates with validation and dated request summaries.
 
-**Next steps:** Expand supported answers and date validation, then explore AI integration.
+**Next steps:** Add a review step so the customer can confirm or correct the request summary before it is cleared.
 
 ## Current Limitations
 
@@ -82,11 +101,13 @@ This is a rule-based prototype, not an AI language model or a real booking syste
 Extraction uses whole-word keywords: `pequeno`, `medio`, `grande`, `hoje`,
 `amanha`, and weekday names. It does not understand arbitrary language, sarcasm,
 or whether an unrelated mention actually describes this pet or request.
-Dates such as `28/10`, synonyms, and multiple pets are not yet supported.
+Month names, times, synonyms, and multiple pets are not yet supported.
 Negated details are handled conservatively by asking for clarification, even
 when a human could infer the intended answer.
-Days are stored as preference labels, not resolved to calendar dates or checked
-against availability. No appointment, price, or time slot is confirmed.
+Calendar dates are preferences only; availability is not checked. No appointment,
+price, or time slot is confirmed. More complex relative expressions such as
+`daqui a duas semanas` are not supported. Weekday modifiers such as `proxima`
+do not change the next-occurrence rule.
 
 A negation applies to following services until punctuation or a word such as
 `mas`, `porem`, `so`, `somente`, or `apenas`. The last mention of each service wins.

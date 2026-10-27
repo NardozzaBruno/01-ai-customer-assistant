@@ -1,10 +1,12 @@
+from datetime import date, datetime, timezone
+from unittest.mock import patch
 import os
 import subprocess
 import sys
 import unittest
 from pathlib import Path
 
-from main import Atendimento, classificar_mensagem, gerar_resposta
+from main import Atendimento, classificar_mensagem, gerar_resposta, resolver_data, hoje_sao_paulo
 
 
 class ClassificadorTests(unittest.TestCase):
@@ -272,6 +274,79 @@ class AtendimentoTests(unittest.TestCase):
         primeiro.responder("banho")
         self.assertIn("procura", segundo.responder("amanha"))
         self.assertIsNone(segundo.servico)
+
+
+class DatasTests(unittest.TestCase):
+    HOJE = date(2026, 10, 27)
+
+    def test_datas_relativas_e_semana(self):
+        casos = {
+            "hoje": date(2026, 10, 27), "amanhã": date(2026, 10, 28),
+            "depois de amanhã": date(2026, 10, 29),
+            "terça-feira": date(2026, 10, 27), "segunda-feira": date(2026, 11, 2),
+            "sexta-feira": date(2026, 10, 30), "28/10": date(2026, 10, 28),
+            "1/11/2026": date(2026, 11, 1), "01/01/2027": date(2027, 1, 1),
+        }
+        for entrada, esperado in casos.items():
+            with self.subTest(entrada=entrada):
+                self.assertEqual(resolver_data(entrada, self.HOJE), esperado)
+
+    def test_datas_invalidas_e_passadas(self):
+        for entrada in ["31/11", "29/02/2026", "32/10", "00/10", "28/00",
+                        "01/13", "26/10", "01/01/2026", "28/10/26", "ontem", "anteontem"]:
+            with self.subTest(entrada=entrada), self.assertRaises(ValueError):
+                resolver_data(entrada, self.HOJE)
+
+    def test_virada_de_ano_e_bissexto(self):
+        self.assertEqual(resolver_data("amanhã", date(2026, 12, 31)), date(2027, 1, 1))
+        self.assertEqual(resolver_data("29/02", date(2028, 2, 28)), date(2028, 2, 29))
+        with self.assertRaises(ValueError):
+            resolver_data("01/01", date(2026, 12, 31))
+
+    def test_resumo_com_data_numerica(self):
+        atendimento = Atendimento(relogio=lambda: self.HOJE)
+        resumo = atendimento.responder("Quero banho para pet pequeno em 28/10")
+        self.assertIn("dia desejado: 28/10 (28/10/2026)", resumo)
+        self.assertIn("não confirmado", resumo)
+        self.assertIsNone(atendimento.data_desejada)
+
+    def test_resumo_com_amanha_e_depois_de_amanha(self):
+        for entrada, esperado in [("amanha", "28/10/2026"), ("depois de amanha", "29/10/2026")]:
+            with self.subTest(entrada=entrada):
+                atendimento = Atendimento(relogio=lambda: self.HOJE)
+                resumo = atendimento.responder(f"banho pet grande {entrada}")
+                self.assertIn(esperado, resumo)
+
+    def test_erro_de_data_preserva_todos_os_dados(self):
+        atendimento = Atendimento(relogio=lambda: self.HOJE)
+        atendimento.responder("banho amanha")
+        for entrada in ["tosa pequeno 31/11", "pequeno 26/10", "28/10/26"]:
+            with self.subTest(entrada=entrada):
+                resposta = atendimento.responder(entrada)
+                self.assertNotIn("Resumo", resposta)
+                self.assertEqual(atendimento.servico, "Banho")
+                self.assertIsNone(atendimento.porte)
+                self.assertEqual(atendimento.data_desejada, date(2026, 10, 28))
+        self.assertIn("28/10/2026", atendimento.responder("pequeno"))
+
+    def test_duas_datas_e_negacoes_pedem_esclarecimento(self):
+        for entrada in ["28/10 ou 29/10", "nao em 28/10", "amanha ou 28/10"]:
+            with self.subTest(entrada=entrada):
+                atendimento = Atendimento(relogio=lambda: self.HOJE)
+                self.assertIn("esclarecer", atendimento.responder(entrada))
+                self.assertIsNone(atendimento.data_desejada)
+
+    def test_data_guardada_expira_ao_mudar_o_dia(self):
+        dias = iter([date(2026, 10, 27), date(2026, 10, 28)])
+        atendimento = Atendimento(relogio=lambda: next(dias))
+        atendimento.responder("banho hoje")
+        self.assertIn("já passou", atendimento.responder("pequeno"))
+        self.assertIsNone(atendimento.data_desejada)
+
+    def test_relogio_converte_utc_para_sao_paulo(self):
+        with patch("main.datetime") as relogio:
+            relogio.now.side_effect = lambda fuso: datetime(2026, 10, 28, 1, tzinfo=timezone.utc).astimezone(fuso)
+            self.assertEqual(hoje_sao_paulo(), date(2026, 10, 27))
 
 
 if __name__ == "__main__":
