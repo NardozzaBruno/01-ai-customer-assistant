@@ -57,6 +57,34 @@ def gerar_resposta(categoria: str) -> str:
     return "Olá! Posso ajudar com banho e tosa. Qual serviço você procura?"
 
 
+def extrair_detalhes(mensagem: str) -> tuple[str | None, str | None, bool]:
+    """Extrai detalhes por palavras inteiras; pede esclarecimento se houver duvida."""
+    entrada = normalizar(mensagem)
+    portes = {"pequeno": "pequeno", "medio": "médio", "grande": "grande"}
+    dias = {
+        "hoje": "hoje", "amanha": "amanhã",
+        "segunda": "segunda-feira", "terca": "terça-feira",
+        "quarta": "quarta-feira", "quinta": "quinta-feira",
+        "sexta": "sexta-feira", "sabado": "sábado", "domingo": "domingo",
+    }
+    encontrados_porte: set[str] = set()
+    encontrados_dia: set[str] = set()
+    ambiguo = False
+    # Uma negacao no mesmo trecho de um detalhe exige uma resposta mais clara.
+    for trecho in re.split(r"[,;.!?]|\b(?:mas|porem)\b", entrada):
+        palavras = set(re.findall(r"\b\w+\b", trecho))
+        p = palavras & portes.keys()
+        d = palavras & dias.keys()
+        if (p or d) and palavras & NEGACOES:
+            ambiguo = True
+        encontrados_porte.update(portes[item] for item in p)
+        encontrados_dia.update(dias[item] for item in d)
+    ambiguo = ambiguo or len(encontrados_porte) > 1 or len(encontrados_dia) > 1
+    porte = next(iter(encontrados_porte)) if len(encontrados_porte) == 1 else None
+    dia = next(iter(encontrados_dia)) if len(encontrados_dia) == 1 else None
+    return porte, dia, ambiguo
+
+
 @dataclass
 class Atendimento:
     """Mantem apenas os dados da solicitacao atual, em memoria."""
@@ -77,35 +105,28 @@ class Atendimento:
             return "Digite uma mensagem para continuar ou 'cancelar' para recomeçar."
 
         categoria = classificar_mensagem(mensagem)
-        if categoria != "Atendimento geral":
-            self.reiniciar()
+        porte, dia, ambiguo = extrair_detalhes(mensagem)
+        if ambiguo:
+            return (
+                "Preciso esclarecer os detalhes. Informe um único porte "
+                "(pequeno, médio ou grande) e um único dia desejado, "
+                "sem alternativas ou negações. O pedido anterior foi mantido."
+            )
+
+        novo_servico = categoria != "Atendimento geral"
+        if novo_servico:
+            if self.servico is not None and self.servico != categoria:
+                self.reiniciar()
             self.servico = categoria
-            return gerar_resposta(categoria)
+        if porte is not None:
+            self.porte = porte
+        if dia is not None:
+            self.dia = dia
 
         if self.servico is None:
             return gerar_resposta("Atendimento geral")
-
-        portes = {"pequeno": "pequeno", "medio": "médio", "grande": "grande"}
-        dias = {
-            "hoje": "hoje", "amanha": "amanhã",
-            "segunda": "segunda-feira", "terca": "terça-feira",
-            "quarta": "quarta-feira", "quinta": "quinta-feira",
-            "sexta": "sexta-feira", "sabado": "sábado", "domingo": "domingo",
-        }
-        dia_normalizado = entrada.replace("-feira", "").replace(" feira", "")
-        if entrada in portes:
-            self.porte = portes[entrada]
-        elif dia_normalizado in dias:
-            self.dia = dias[dia_normalizado]
-        else:
-            return (
-                "Não entendi esse detalhe. Responda com pequeno, médio ou grande; "
-                "ou com hoje, amanhã ou um dia da semana. "
-                "Digite 'cancelar' para recomeçar."
-            )
-
         if self.porte is None:
-            return "Dia anotado. Qual é o porte do seu pet (pequeno, médio ou grande)?"
+            return gerar_resposta(self.servico)
         if self.dia is None:
             return "Para qual dia? Responda hoje, amanhã ou um dia da semana."
 

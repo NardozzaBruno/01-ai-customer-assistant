@@ -126,6 +126,11 @@ class ClassificadorTests(unittest.TestCase):
         self.assertIn("Agendamento não confirmado", resultado.stdout)
         self.assertEqual(resultado.stdout.count("Categoria:"), 1)
 
+    def test_mensagem_completa_natural_no_terminal(self):
+        resultado = self.executar_terminal("quero banho para um pet grande amanha\nsair\n")
+        self.assertIn("Banho; porte grande; dia desejado: amanhã", resultado.stdout)
+        self.assertNotIn("Qual é o porte", resultado.stdout)
+
     def executar_terminal(self, entrada):
         resultado = subprocess.run(
             [sys.executable, str(Path(__file__).with_name("main.py"))],
@@ -192,6 +197,75 @@ class AtendimentoTests(unittest.TestCase):
         self.assertEqual(atendimento.servico, "Tosa")
         self.assertIsNone(atendimento.porte)
         self.assertIsNone(atendimento.dia)
+
+    def test_respostas_naturais(self):
+        atendimento = Atendimento()
+        atendimento.responder("quero banho")
+        self.assertIn("dia", atendimento.responder("Meu pet é pequeno."))
+        resumo = atendimento.responder("Pode ser amanhã.")
+        self.assertIn("Banho; porte pequeno; dia desejado: amanhã", resumo)
+
+    def test_todos_os_dados_na_primeira_mensagem(self):
+        atendimento = Atendimento()
+        resumo = atendimento.responder("Quero banho para um pet grande amanhã")
+        self.assertIn("Banho; porte grande; dia desejado: amanhã", resumo)
+        self.assertIsNone(atendimento.servico)
+
+    def test_pergunta_apenas_o_que_falta(self):
+        atendimento = Atendimento()
+        pergunta = atendimento.responder("Banho e tosa para sexta-feira")
+        self.assertIn("porte", pergunta)
+        self.assertEqual(atendimento.dia, "sexta-feira")
+        resumo = atendimento.responder("Meu pet é de porte médio")
+        self.assertIn("Banho e Tosa; porte médio; dia desejado: sexta-feira", resumo)
+
+    def test_detalhes_juntos_em_resposta(self):
+        atendimento = Atendimento()
+        atendimento.responder("tosa")
+        resumo = atendimento.responder("Ele é pequeno e pode ser na terça-feira")
+        self.assertIn("Tosa; porte pequeno; dia desejado: terça-feira", resumo)
+
+    def test_repetir_servico_preserva_detalhes(self):
+        atendimento = Atendimento()
+        atendimento.responder("banho para pet pequeno")
+        resumo = atendimento.responder("o banho pode ser amanhã")
+        self.assertIn("Banho; porte pequeno; dia desejado: amanhã", resumo)
+
+    def test_detalhes_ambiguos_nao_alteram_pedido(self):
+        for entrada in [
+            "amanha ou sexta", "pequeno ou grande", "nao amanha",
+            "nao e pequeno", "nao amanha, sexta", "sem banho amanha",
+        ]:
+            with self.subTest(entrada=entrada):
+                atendimento = Atendimento(servico="Banho", porte="medio")
+                resposta = atendimento.responder(entrada)
+                self.assertIn("esclarecer", resposta)
+                self.assertEqual(atendimento.servico, "Banho")
+                self.assertEqual(atendimento.porte, "medio")
+                self.assertIsNone(atendimento.dia)
+
+    def test_nao_extrai_fragmentos_de_palavras(self):
+        atendimento = Atendimento(servico="Banho")
+        atendimento.responder("a grandeza e a medianoche")
+        self.assertIsNone(atendimento.porte)
+        self.assertIsNone(atendimento.dia)
+
+    def test_servico_com_negacao_e_detalhes_separados(self):
+        atendimento = Atendimento()
+        resumo = atendimento.responder("Nao quero banho, so tosa, pet pequeno amanha")
+        self.assertIn("Tosa; porte pequeno; dia desejado: amanhã", resumo)
+
+    def test_detalhes_antes_do_servico(self):
+        atendimento = Atendimento()
+        self.assertIn("procura", atendimento.responder("pet pequeno para amanha"))
+        self.assertIn("Banho; porte pequeno; dia desejado: amanhã", atendimento.responder("banho"))
+
+    def test_correcao_de_porte_antes_do_resumo(self):
+        atendimento = Atendimento()
+        atendimento.responder("banho para pet pequeno")
+        atendimento.responder("na verdade ele e grande")
+        self.assertEqual(atendimento.porte, "grande")
+        self.assertIn("porte grande", atendimento.responder("amanha"))
 
     def test_sessoes_independentes(self):
         primeiro, segundo = Atendimento(), Atendimento()
