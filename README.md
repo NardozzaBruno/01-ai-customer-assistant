@@ -5,8 +5,7 @@ A simple customer message classifier built with Python.
 ## About the Project
 
 This project is the first step toward developing an AI-powered customer service assistant.
-
-The current version uses keyword-based rules to identify customer service requests.
+The current version uses rules to classify Portuguese customer messages.
 
 ## Features
 
@@ -14,6 +13,8 @@ The current version uses keyword-based rules to identify customer service reques
 - Grooming service classification
 - Combined bath and grooming classification
 - General inquiry classification
+- Whole-word matching, ignoring case and accents
+- Simple negation handling with `nao`, `sem`, and `nem`
 
 ## Technologies
 
@@ -23,21 +24,37 @@ The current version uses keyword-based rules to identify customer service reques
 
 ## How to Run
 
-Run the following command in the project folder:
+Run `python main.py` in the project folder and enter a message in Portuguese.
 
-`python main.py`
+## Examples
 
-## Project Status
+| Message | Category |
+| --- | --- |
+| Quero banho e tosa | Banho e Tosa |
+| Nao quero banho, so tosa | Tosa |
+| Quero banho sem tosa | Banho |
+| Nao quero banho nem tosa | Atendimento geral |
+| A comida estava gostosa | Atendimento geral |
 
-**Version 0.2:** Keyword-based message classifier with a reusable classification function and automated tests.
-
-**Next steps:** Improve keyword matching and explore AI integration.
 ## Running Tests
 
 Run `python -m unittest -v` in the project folder. No extra packages are required.
+Tests cover service categories, uppercase and accented messages, empty input,
+whole words, simple negations, request corrections, and terminal interaction.
 
-Tests cover service categories, uppercase messages, empty input, and terminal interaction.
+## Project Status
+
+**Version 0.3:** Whole-word matching and simple negation rules with automated tests.
+
+**Next steps:** Expand language coverage and explore AI integration.
 
 ## Current Limitations
 
-Classification uses keyword fragments, so it can misinterpret negations or words containing those fragments. It does not yet understand customer intent.
+This is a rule-based prototype, not an AI language model. A negation applies to
+following services until punctuation or a contrast/restriction word such as
+`mas`, `porem`, `so`, `somente`, or `apenas`. The last mention of each service wins.
+
+Complex sentences can still be misclassified, including `nao apenas banho, mas
+tambem tosa`, `nao sei quanto custa o banho`, and `nao quero banho e quero tosa`.
+Synonyms, plural forms, and spelling mistakes are not yet supported. When no
+service is accepted, the result is `Atendimento geral`.
