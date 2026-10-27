@@ -12,7 +12,9 @@ A rule-based Portuguese customer service prototype for a pet shop, built with Py
 - Asks only for missing details and requests clarification for ambiguous details
 - Resolves relative days, weekdays, and numeric dates to calendar dates
 - Rejects invalid dates and past days without overwriting the previous request
-- Displays a dated request summary without confirming a booking
+- Displays a dated request summary for customer review
+- Allows service, size, and date corrections before explicit `confirmar`
+- Concludes only the demonstration request; never confirms a real booking
 - Supports `cancelar` or `reiniciar` to discard a request, and `sair` to exit
 
 ## Technologies
@@ -28,7 +30,10 @@ Run `python main.py` in the project folder.
 1. Enter the service, for example `quero banho`.
 2. Reply with `pequeno`, `medio`, or `grande` for the pet size.
 3. Reply with `hoje`, `amanha`, a weekday such as `sexta-feira`, or a date such as `28/10/2026`.
-4. Read the request summary. Availability must still be checked by the pet shop.
+4. Review the summary. Correct the service, size, or date by entering its new value.
+5. Type `confirmar` to conclude the demonstration request, or `cancelar` to discard it.
+
+Availability must still be checked by the pet shop. Nothing is sent to the pet shop.
 
 Accents and uppercase letters are accepted. Size and day can be supplied in either
 order, separately or together. Examples:
@@ -54,7 +59,11 @@ Assistente: Certo, banho! Qual é o porte do seu pet (pequeno, médio ou grande)
 Cliente: pequeno
 Assistente: Para qual dia? Responda hoje, amanhã, um dia da semana ou uma data (dia/mês/ano).
 Cliente: amanhã
-Assistente: Resumo da solicitação: Banho; porte pequeno; dia desejado: amanhã (28/10/2026). Agendamento não confirmado: depende da disponibilidade do pet shop. Para iniciar outra solicitação, informe o serviço.
+Assistente: Resumo da solicitação: Banho; porte pequeno; dia desejado: amanhã (28/10/2026). Agendamento não confirmado: depende da disponibilidade do pet shop. Confira os dados. Digite 'confirmar' para concluir a solicitação, informe outro serviço, porte ou dia para corrigir, ou digite 'cancelar' para descartar.
+Cliente: grande
+Assistente: Resumo da solicitação: Banho; porte grande; dia desejado: amanhã (28/10/2026). Agendamento não confirmado: depende da disponibilidade do pet shop. Confira os dados. Digite 'confirmar' para concluir a solicitação, informe outro serviço, porte ou dia para corrigir, ou digite 'cancelar' para descartar.
+Cliente: confirmar
+Assistente: Resumo da solicitação: Banho; porte grande; dia desejado: amanhã (28/10/2026). Agendamento não confirmado: depende da disponibilidade do pet shop. Solicitação revisada e concluída nesta demonstração. Nada foi enviado ao pet shop. Para iniciar outra, informe o serviço.
 ```
 
 ## Date Rules
@@ -74,10 +83,18 @@ Assistente: Resumo da solicitação: Banho; porte pequeno; dia desejado: amanhã
 ## Session Behavior
 
 - `cancelar` and `reiniciar` discard all details of the current request.
-- Changing the service clears old details and uses any details in the new message.
+- During initial collection, changing the service clears old details.
+- During review, changing the service preserves the size and date; other supplied
+  details update their respective fields.
 - Repeating the same service preserves previously collected details.
-- A new unambiguous size or day replaces that detail before the summary is shown.
-- After displaying a summary, the assistant clears the request for the next customer.
+- A new unambiguous size or day replaces that detail and displays an updated summary
+  whenever all required fields are present. Invalid input preserves the request.
+- Displaying a summary keeps the request in memory for review.
+- Only the standalone command `confirmar` concludes a complete, current request.
+  `sim`, `ok`, and messages containing additional text do not conclude it.
+- Confirmation, cancellation, or restart clears the request for the next customer.
+- Exiting discards the session. If a date expires before confirmation, a new date
+  is required; the service and size are preserved.
 - Data is kept only in memory. Nothing is saved to disk or sent to a booking system.
 
 ## Running Tests
@@ -87,13 +104,15 @@ Tests cover classification, simple negations, replies, full terminal conversatio
 size/day order, invalid details, cancellation, service changes, independent sessions,
 exit commands, end-of-input, natural phrases, combined details, corrections,
 repeated services, ambiguous details, whole-word detail matching, numeric dates,
-relative days, weekdays, leap years, year boundaries, past dates, and timezone conversion.
+relative days, weekdays, leap years, year boundaries, past dates, timezone conversion,
+summary corrections, explicit confirmation, cancellation during review, expired-date
+confirmation, and reset between customers.
 
 ## Project Status
 
-**Version 0.8:** Calendar dates with validation and dated request summaries.
+**Version 0.9:** Reviewable summaries, corrections, and explicit request completion.
 
-**Next steps:** Add a review step so the customer can confirm or correct the request summary before it is cleared.
+**Next steps:** Improve the terminal demonstration and add a short usage walkthrough for the portfolio.
 
 ## Current Limitations
 

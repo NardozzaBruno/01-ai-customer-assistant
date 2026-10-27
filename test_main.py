@@ -133,6 +133,15 @@ class ClassificadorTests(unittest.TestCase):
         self.assertIn("Banho; porte grande; dia desejado: amanhã", resultado.stdout)
         self.assertNotIn("Qual é o porte", resultado.stdout)
 
+    def test_revisao_correcao_e_confirmacao_no_terminal(self):
+        resultado = self.executar_terminal(
+            "banho pequeno amanha\ngrande\nconfirmar\ntosa\nsair\n"
+        )
+        self.assertIn("Banho; porte grande", resultado.stdout)
+        self.assertIn("concluída", resultado.stdout)
+        self.assertIn("Certo, tosa!", resultado.stdout)
+        self.assertEqual(resultado.stdout.count("concluída"), 1)
+
     def executar_terminal(self, entrada):
         resultado = subprocess.run(
             [sys.executable, str(Path(__file__).with_name("main.py"))],
@@ -149,7 +158,7 @@ class ClassificadorTests(unittest.TestCase):
 
 
 class AtendimentoTests(unittest.TestCase):
-    def test_guarda_contexto_e_limpa_apos_resumo(self):
+    def test_guarda_contexto_ate_confirmar(self):
         atendimento = Atendimento()
         atendimento.responder("quero banho")
         self.assertIn("dia", atendimento.responder("pequeno"))
@@ -157,6 +166,9 @@ class AtendimentoTests(unittest.TestCase):
         self.assertIn("Banho; porte pequeno", resumo)
         self.assertIn("dia desejado: amanhã", resumo)
         self.assertIn("não confirmado", resumo)
+        self.assertTrue(atendimento.em_revisao)
+        self.assertEqual(atendimento.servico, "Banho")
+        atendimento.responder("confirmar")
         self.assertIsNone(atendimento.servico)
         self.assertIsNone(atendimento.porte)
         self.assertIsNone(atendimento.dia)
@@ -211,7 +223,8 @@ class AtendimentoTests(unittest.TestCase):
         atendimento = Atendimento()
         resumo = atendimento.responder("Quero banho para um pet grande amanhã")
         self.assertIn("Banho; porte grande; dia desejado: amanhã", resumo)
-        self.assertIsNone(atendimento.servico)
+        self.assertTrue(atendimento.em_revisao)
+        self.assertEqual(atendimento.servico, "Banho")
 
     def test_pergunta_apenas_o_que_falta(self):
         atendimento = Atendimento()
@@ -308,7 +321,8 @@ class DatasTests(unittest.TestCase):
         resumo = atendimento.responder("Quero banho para pet pequeno em 28/10")
         self.assertIn("dia desejado: 28/10 (28/10/2026)", resumo)
         self.assertIn("não confirmado", resumo)
-        self.assertIsNone(atendimento.data_desejada)
+        self.assertEqual(atendimento.data_desejada, date(2026, 10, 28))
+        self.assertTrue(atendimento.em_revisao)
 
     def test_resumo_com_amanha_e_depois_de_amanha(self):
         for entrada, esperado in [("amanha", "28/10/2026"), ("depois de amanha", "29/10/2026")]:
@@ -347,6 +361,92 @@ class DatasTests(unittest.TestCase):
         with patch("main.datetime") as relogio:
             relogio.now.side_effect = lambda fuso: datetime(2026, 10, 28, 1, tzinfo=timezone.utc).astimezone(fuso)
             self.assertEqual(hoje_sao_paulo(), date(2026, 10, 27))
+
+
+class RevisaoTests(unittest.TestCase):
+    def novo_atendimento(self):
+        atendimento = Atendimento(relogio=lambda: date(2026, 10, 27))
+        atendimento.responder("banho pet pequeno amanha")
+        return atendimento
+
+    def test_corrigir_servico_porte_e_data_preserva_demais_dados(self):
+        atendimento = self.novo_atendimento()
+        resposta = atendimento.responder("quero tosa")
+        self.assertIn("Tosa; porte pequeno", resposta)
+        self.assertIn("28/10/2026", resposta)
+        resposta = atendimento.responder("na verdade ele e grande")
+        self.assertIn("Tosa; porte grande", resposta)
+        resposta = atendimento.responder("pode ser em 30/10")
+        self.assertIn("Tosa; porte grande", resposta)
+        self.assertIn("30/10/2026", resposta)
+        self.assertTrue(atendimento.em_revisao)
+
+    def test_confirmacao_limpa_todos_os_dados(self):
+        atendimento = self.novo_atendimento()
+        resposta = atendimento.responder("  CONFIRMAR! ")
+        self.assertIn("concluída", resposta)
+        self.assertIn("Agendamento não confirmado", resposta)
+        self.assertIn("Nada foi enviado", resposta)
+        self.assertIsNone(atendimento.servico)
+        self.assertIsNone(atendimento.porte)
+        self.assertIsNone(atendimento.dia)
+        self.assertIsNone(atendimento.data_desejada)
+        self.assertFalse(atendimento.em_revisao)
+        self.assertIn("faltam", atendimento.responder("confirmar"))
+
+    def test_confirmar_antes_de_completar_nao_conclui(self):
+        atendimento = Atendimento(relogio=lambda: date(2026, 10, 27))
+        atendimento.responder("banho pequeno")
+        self.assertIn("faltam", atendimento.responder("confirmar"))
+        self.assertEqual(atendimento.porte, "pequeno")
+        self.assertFalse(atendimento.em_revisao)
+
+    def test_resposta_desconhecida_nao_confirma(self):
+        atendimento = self.novo_atendimento()
+        for mensagem in ["sim", "ok", "nao", "nao confirmar", "confirmar amanha"]:
+            with self.subTest(mensagem=mensagem):
+                resposta = atendimento.responder(mensagem)
+                self.assertNotIn("concluída", resposta)
+                self.assertTrue(atendimento.em_revisao)
+                self.assertEqual(atendimento.servico, "Banho")
+
+    def test_dados_invalidos_nao_alteram_revisao(self):
+        atendimento = self.novo_atendimento()
+        for mensagem in ["31/11", "ontem", "pequeno ou grande", "amanha ou sexta"]:
+            with self.subTest(mensagem=mensagem):
+                atendimento.responder(mensagem)
+                self.assertTrue(atendimento.em_revisao)
+                self.assertEqual(atendimento.servico, "Banho")
+                self.assertEqual(atendimento.porte, "pequeno")
+                self.assertEqual(atendimento.data_desejada, date(2026, 10, 28))
+
+    def test_cancelar_ou_reiniciar_durante_revisao(self):
+        for comando in ["cancelar", "reiniciar"]:
+            atendimento = self.novo_atendimento()
+            atendimento.responder(comando)
+            self.assertFalse(atendimento.em_revisao)
+            self.assertIsNone(atendimento.servico)
+            self.assertIsNone(atendimento.data_desejada)
+            self.assertIn("faltam", atendimento.responder("confirmar"))
+
+    def test_nao_confirma_data_expirada(self):
+        atendimento = self.novo_atendimento()
+        atendimento.relogio = lambda: date(2026, 10, 29)
+        resposta = atendimento.responder("confirmar")
+        self.assertIn("já passou", resposta)
+        self.assertFalse(atendimento.em_revisao)
+        self.assertEqual(atendimento.servico, "Banho")
+        self.assertEqual(atendimento.porte, "pequeno")
+        self.assertIsNone(atendimento.data_desejada)
+        self.assertIn("confirmar", atendimento.responder("30/10"))
+
+    def test_outro_cliente_comeca_sem_dados_anteriores(self):
+        atendimento = self.novo_atendimento()
+        atendimento.responder("confirmar")
+        atendimento.responder("tosa")
+        self.assertEqual(atendimento.servico, "Tosa")
+        self.assertIsNone(atendimento.porte)
+        self.assertIsNone(atendimento.data_desejada)
 
 
 if __name__ == "__main__":

@@ -60,7 +60,6 @@ def gerar_resposta(categoria: str) -> str:
     return "Olá! Posso ajudar com banho e tosa. Qual serviço você procura?"
 
 
-
 def hoje_sao_paulo() -> date:
     try:
         fuso = ZoneInfo("America/Sao_Paulo")
@@ -135,11 +134,20 @@ class Atendimento:
     porte: str | None = None
     dia: str | None = None
     data_desejada: date | None = None
+    em_revisao: bool = False
     relogio: Callable[[], date] = field(default=hoje_sao_paulo, repr=False)
 
     def reiniciar(self) -> None:
         self.servico = self.porte = self.dia = None
         self.data_desejada = None
+        self.em_revisao = False
+
+    def resumo(self) -> str:
+        return (
+            f"Resumo da solicitação: {self.servico}; porte {self.porte}; "
+            f"dia desejado: {self.dia} ({self.data_desejada:%d/%m/%Y}). "
+            "Agendamento não confirmado: depende da disponibilidade do pet shop. "
+        )
 
     def responder(self, mensagem: str) -> str:
         entrada = normalizar(mensagem)
@@ -148,6 +156,23 @@ class Atendimento:
             return "Solicitação descartada. Qual serviço você procura?"
         if not entrada:
             return "Digite uma mensagem para continuar ou 'cancelar' para recomeçar."
+
+        hoje = self.relogio()
+        if entrada == "confirmar":
+            if not self.em_revisao:
+                return "Ainda faltam dados para revisar a solicitação. Informe serviço, porte e dia."
+            if self.data_desejada is None or self.data_desejada < hoje:
+                self.dia = None
+                self.data_desejada = None
+                self.em_revisao = False
+                return "O dia informado anteriormente já passou. Para qual nova data deseja solicitar?"
+            resposta = (
+                self.resumo()
+                + "Solicitação revisada e concluída nesta demonstração. "
+                "Nada foi enviado ao pet shop. Para iniciar outra, informe o serviço."
+            )
+            self.reiniciar()
+            return resposta
 
         categoria = classificar_mensagem(mensagem)
         porte, dia, ambiguo = extrair_detalhes(mensagem)
@@ -158,7 +183,6 @@ class Atendimento:
                 "sem alternativas ou negações. O pedido anterior foi mantido."
             )
 
-        hoje = self.relogio()
         data = None
         if dia is not None:
             try:
@@ -168,7 +192,7 @@ class Atendimento:
 
         novo_servico = categoria != "Atendimento geral"
         if novo_servico:
-            if self.servico is not None and self.servico != categoria:
+            if self.servico is not None and self.servico != categoria and not self.em_revisao:
                 self.reiniciar()
             self.servico = categoria
         if porte is not None:
@@ -180,6 +204,7 @@ class Atendimento:
         if self.data_desejada is not None and self.data_desejada < hoje:
             self.dia = None
             self.data_desejada = None
+            self.em_revisao = False
             return "O dia informado anteriormente já passou. Para qual nova data deseja solicitar?"
 
         if self.servico is None:
@@ -189,14 +214,13 @@ class Atendimento:
         if self.dia is None:
             return "Para qual dia? Responda hoje, amanhã, um dia da semana ou uma data (dia/mês/ano)."
 
-        resumo = (
-            f"Resumo da solicitação: {self.servico}; porte {self.porte}; "
-            f"dia desejado: {self.dia} ({self.data_desejada:%d/%m/%Y}). "
-            "Agendamento não confirmado: depende da disponibilidade do pet shop. "
-            "Para iniciar outra solicitação, informe o serviço."
+        self.em_revisao = True
+        return (
+            self.resumo()
+            + "Confira os dados. Digite 'confirmar' para concluir a solicitação, "
+            "informe outro serviço, porte ou dia para corrigir, "
+            "ou digite 'cancelar' para descartar."
         )
-        self.reiniciar()
-        return resumo
 
 
 def main() -> None:
