@@ -1,6 +1,47 @@
 # AI Customer Assistant
 
-A rule-based Portuguese customer service prototype for a pet shop, built with Python.
+A Python prototype that turns a pet-shop service request into a reviewable summary
+of the service, pet size, and preferred date.
+
+## Problem and Approach
+
+Before a bath or grooming request can be reviewed, the pet shop needs basic details.
+This project demonstrates how a conversation can collect those details, remember
+previous answers, validate dates, and let the customer correct the result.
+
+The current implementation uses deterministic rules, not an AI model. It runs locally
+without paid APIs and does not connect to a booking system. The project name reflects
+its intended direction; the implemented behavior is described below.
+
+**Try the [guided demonstration](DEMO.md)** for a two-minute walkthrough, real example
+replies, extra scenarios, and a short Portuguese portfolio description.
+
+## Quick Start
+
+With Python 3.12 and Git installed, open a terminal in the directory where you want
+to keep the project:
+
+```powershell
+git clone https://github.com/NardozzaBruno/01-ai-customer-assistant.git
+cd 01-ai-customer-assistant
+python main.py
+```
+
+If you already have the project locally, open its folder in a terminal and run
+`python main.py`. No additional packages, API keys, or account setup are needed.
+
+Try `quero banho para um pet grande amanha`, review the summary, then type
+`confirmar` to complete the demonstration request or `sair` to exit.
+
+## Implementation Highlights
+
+- Stateful conversation with collection, review, correction, and reset behavior
+- Whole-word matching, accent normalization, and simple negation handling
+- Calendar validation and an injectable clock for reproducible date tests
+- Automated tests for normal conversations, invalid input, and session boundaries
+
+The prototype demonstrates these behaviors; it has not been evaluated with real
+customers, and no business-performance claims are made.
 
 ## Features
 
@@ -51,20 +92,8 @@ Empty input shows a hint. End-of-input or Ctrl+C ends the session gracefully.
 
 ## Conversation Example
 
-Example with the current day fixed at October 27, 2026:
-
-```text
-Cliente: quero banho
-Assistente: Certo, banho! Qual é o porte do seu pet (pequeno, médio ou grande)?
-Cliente: pequeno
-Assistente: Para qual dia? Responda hoje, amanhã, um dia da semana ou uma data (dia/mês/ano).
-Cliente: amanhã
-Assistente: Resumo da solicitação: Banho; porte pequeno; dia desejado: amanhã (28/10/2026). Agendamento não confirmado: depende da disponibilidade do pet shop. Confira os dados. Digite 'confirmar' para concluir a solicitação, informe outro serviço, porte ou dia para corrigir, ou digite 'cancelar' para descartar.
-Cliente: grande
-Assistente: Resumo da solicitação: Banho; porte grande; dia desejado: amanhã (28/10/2026). Agendamento não confirmado: depende da disponibilidade do pet shop. Confira os dados. Digite 'confirmar' para concluir a solicitação, informe outro serviço, porte ou dia para corrigir, ou digite 'cancelar' para descartar.
-Cliente: confirmar
-Assistente: Resumo da solicitação: Banho; porte grande; dia desejado: amanhã (28/10/2026). Agendamento não confirmado: depende da disponibilidade do pet shop. Solicitação revisada e concluída nesta demonstração. Nada foi enviado ao pet shop. Para iniciar outra, informe o serviço.
-```
+See the [guided demonstration](DEMO.md#exemplo-real-das-respostas) for a complete
+conversation, including a size correction and explicit completion.
 
 ## Date Rules
 
@@ -112,7 +141,9 @@ confirmation, and reset between customers.
 
 **Version 0.9:** Reviewable summaries, corrections, and explicit request completion.
 
-**Next steps:** Improve the terminal demonstration and add a short usage walkthrough for the portfolio.
+**Portfolio walkthrough:** See [DEMO.md](DEMO.md).
+
+**Next steps:** Collect feedback from manual demonstrations before choosing the next feature.
 
 ## Current Limitations
 
@@ -133,3 +164,17 @@ A negation applies to following services until punctuation or a word such as
 Complex sentences such as `nao apenas banho, mas tambem tosa`,
 `nao sei quanto custa o banho`, and `nao quero banho e quero tosa` can still be
 misclassified. Synonyms, plural forms, and spelling mistakes are not supported.
+
+## Project Files
+
+| File | Purpose |
+| --- | --- |
+| `main.py` | Classification, date handling, conversation state, and terminal interaction |
+| `test_main.py` | Automated tests |
+| `DEMO.md` | Guided presentation and portfolio description |
+
+## Contributing
+
+Reproduce a problem with a short conversation and include the expected result.
+For behavior changes, add a relevant test and run `python -m unittest -v`.
+Keep examples and documented limitations consistent with the actual implementation.
