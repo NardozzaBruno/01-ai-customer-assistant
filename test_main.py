@@ -4,7 +4,7 @@ import sys
 import unittest
 from pathlib import Path
 
-from main import classificar_mensagem, gerar_resposta
+from main import Atendimento, classificar_mensagem, gerar_resposta
 
 
 class ClassificadorTests(unittest.TestCase):
@@ -87,7 +87,7 @@ class ClassificadorTests(unittest.TestCase):
 
     def test_respostas_por_categoria(self):
         casos = [
-            ("Banho", "banho", "dia"),
+            ("Banho", "banho", "porte"),
             ("Tosa", "tosa", "porte"),
             ("Banho e Tosa", "banho e tosa", "porte"),
             ("Atendimento geral", "banho e tosa", "procura"),
@@ -109,15 +109,22 @@ class ClassificadorTests(unittest.TestCase):
             "banho\ntosa\nbanho e tosa\nola\nsair\n"
         )
         self.assertEqual(resultado.stdout.count("Assistente:"), 4)
-        self.assertIn("solicitar o banho?", resultado.stdout)
-        self.assertIn("pet para a tosa?", resultado.stdout)
-        self.assertIn("solicitar banho e tosa?", resultado.stdout)
-        self.assertIn("procura?", resultado.stdout)
+        self.assertIn("Certo, banho!", resultado.stdout)
+        self.assertIn("Certo, tosa!", resultado.stdout)
+        self.assertIn("Certo, banho e tosa!", resultado.stdout)
+        self.assertIn("cancelar", resultado.stdout)
         self.assertNotIn("Traceback", resultado.stderr)
 
     def test_saida_e_entrada_vazia_nao_geram_respostas(self):
         resultado = self.executar_terminal("\nsair\n")
         self.assertNotIn("Assistente:", resultado.stdout)
+
+    def test_conversa_completa_no_terminal(self):
+        resultado = self.executar_terminal("banho\npequeno\namanha\nsair\n")
+        self.assertIn("Resumo da solicitação: Banho; porte pequeno", resultado.stdout)
+        self.assertIn("dia desejado: amanhã", resultado.stdout)
+        self.assertIn("Agendamento não confirmado", resultado.stdout)
+        self.assertEqual(resultado.stdout.count("Categoria:"), 1)
 
     def executar_terminal(self, entrada):
         resultado = subprocess.run(
@@ -132,6 +139,65 @@ class ClassificadorTests(unittest.TestCase):
         self.assertEqual(resultado.returncode, 0, resultado.stderr)
         self.assertEqual(resultado.stderr, "")
         return resultado
+
+
+class AtendimentoTests(unittest.TestCase):
+    def test_guarda_contexto_e_limpa_apos_resumo(self):
+        atendimento = Atendimento()
+        atendimento.responder("quero banho")
+        self.assertIn("dia", atendimento.responder("pequeno"))
+        resumo = atendimento.responder("amanhã")
+        self.assertIn("Banho; porte pequeno", resumo)
+        self.assertIn("dia desejado: amanhã", resumo)
+        self.assertIn("não confirmado", resumo)
+        self.assertIsNone(atendimento.servico)
+        self.assertIsNone(atendimento.porte)
+        self.assertIsNone(atendimento.dia)
+
+    def test_dia_pode_vir_antes_do_porte(self):
+        atendimento = Atendimento()
+        atendimento.responder("tosa")
+        self.assertIn("porte", atendimento.responder("sexta-feira"))
+        self.assertIn("Tosa; porte médio; dia desejado: sexta-feira", atendimento.responder("MÉDIO"))
+
+    def test_detalhe_invalido_nao_perde_contexto(self):
+        atendimento = Atendimento()
+        atendimento.responder("banho e tosa")
+        atendimento.responder("grande")
+        for entrada in ["", "nao amanha", "qual o preco?", "32/13"]:
+            with self.subTest(entrada=entrada):
+                atendimento.responder(entrada)
+                self.assertEqual(atendimento.servico, "Banho e Tosa")
+                self.assertEqual(atendimento.porte, "grande")
+                self.assertIsNone(atendimento.dia)
+        self.assertIn("Banho e Tosa; porte grande", atendimento.responder("hoje"))
+
+    def test_cancelar_e_reiniciar_descartam_detalhes(self):
+        for comando in [" CANCELAR ", "reiniciar"]:
+            with self.subTest(comando=comando):
+                atendimento = Atendimento()
+                atendimento.responder("banho")
+                atendimento.responder("pequeno")
+                atendimento.responder(comando)
+                self.assertIsNone(atendimento.servico)
+                self.assertIsNone(atendimento.porte)
+                self.assertIsNone(atendimento.dia)
+                self.assertIn("procura", atendimento.responder("amanha"))
+
+    def test_troca_de_servico_inicia_outro_pedido(self):
+        atendimento = Atendimento()
+        atendimento.responder("banho")
+        atendimento.responder("pequeno")
+        atendimento.responder("nao quero banho, so tosa")
+        self.assertEqual(atendimento.servico, "Tosa")
+        self.assertIsNone(atendimento.porte)
+        self.assertIsNone(atendimento.dia)
+
+    def test_sessoes_independentes(self):
+        primeiro, segundo = Atendimento(), Atendimento()
+        primeiro.responder("banho")
+        self.assertIn("procura", segundo.responder("amanha"))
+        self.assertIsNone(segundo.servico)
 
 
 if __name__ == "__main__":
